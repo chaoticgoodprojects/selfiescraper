@@ -9,6 +9,8 @@ import uuid
 import requests
 import undetected_chromedriver as uc
 from bs4 import BeautifulSoup
+import json
+from oauth2client.service_account import ServiceAccountCredentials  # ← only new import
 
 app = Flask(__name__)
 
@@ -16,16 +18,13 @@ app = Flask(__name__)
 progress = {}
 message_queue = queue.Queue()
 
-# Setup Google Drive authentication
+# Setup Google Drive authentication (replaces credentials.json)
+credentials_dict = json.loads(os.environ['GOOGLE_DRIVE_CREDENTIALS_JSON'])
 ga = GoogleAuth()
-ga.LoadCredentialsFile("credentials.json")
-if not ga.credentials:
-    ga.LocalWebserverAuth()
-elif ga.access_token_expired:
-    ga.Refresh()
-else:
-    ga.Authorize()
-ga.SaveCredentialsFile("credentials.json")
+ga.credentials = ServiceAccountCredentials.from_json_keyfile_dict(
+    credentials_dict,
+    scopes=["https://www.googleapis.com/auth/drive"]
+)
 drive = GoogleDrive(ga)
 
 def download_and_upload(username, count, session_id):
