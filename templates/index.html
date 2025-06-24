@@ -1,118 +1,101 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <title>TikTok to Google Drive</title>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            max-width: 600px;
-            margin: 2rem auto;
-            padding: 2rem;
-            background-color: #f9f9f9;
-            border-radius: 8px;
-        }
-        h1 {
-            text-align: center;
-        }
-        input, button {
-            padding: 0.5rem;
-            margin: 0.5rem 0;
-            width: 100%;
-            font-size: 1rem;
-        }
-        button {
-            background-color: #4CAF50;
-            color: white;
-            border: none;
-            cursor: pointer;
-        }
-        #status {
-            margin-top: 1rem;
-            background-color: #fff;
-            border: 1px solid #ccc;
-            padding: 1rem;
-            max-height: 300px;
-            overflow-y: auto;
-        }
-    </style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>TikTok Downloader</title>
+  <style>
+    body { font-family: sans-serif; margin: 2rem; }
+    form { margin-bottom: 1rem; }
+    label { display: block; margin: 0.5rem 0; }
+    input { padding: 0.3rem; width: 200px; }
+    button { padding: 0.5rem 1rem; }
+    #status { border: 1px solid #ccc; padding: 1rem; height: 300px; overflow-y: scroll; white-space: pre-wrap; background: #f9f9f9; }
+    #status p { margin: 0.2rem 0; }
+  </style>
 </head>
 <body>
-    <h1>TikTok to Google Drive</h1>
-    <form id="download-form">
-        <label for="username">TikTok Username:</label>
-        <input type="text" id="username" name="username" placeholder="e.g. charlidamelio" required>
 
-        <label for="count">Number of Videos:</label>
-        <input type="number" id="count" name="count" value="5" min="1" max="20" required>
+  <h1>TikTok No-Watermark Downloader</h1>
 
-        <button type="submit">Download & Upload</button>
-    </form>
+  <form id="download-form">
+    <label>
+      TikTok Username:
+      <input type="text" id="username" name="username" placeholder="e.g. bianca.lperez" required />
+    </label>
+    <label>
+      Number of videos:
+      <input type="number" id="count" name="count" min="1" value="1" required />
+    </label>
+    <button type="submit">Start Download</button>
+  </form>
 
-    <div id="status"></div>
+  <div id="status">
+    <p>Waiting to start...</p>
+  </div>
 
-    <script>
-  document.addEventListener("DOMContentLoaded", () => {
-    const form = document.getElementById("download-form");
-    const statusDiv = document.getElementById("status");
+  <script>
+    document.addEventListener("DOMContentLoaded", () => {
+      const form = document.getElementById("download-form");
+      const statusDiv = document.getElementById("status");
 
-    form.addEventListener("submit", function(e) {
-      e.preventDefault();
+      form.addEventListener("submit", function(e) {
+        e.preventDefault();
+        statusDiv.innerHTML = "";  // clear old messages
 
-      // Clear previous status messages
-      statusDiv.innerHTML = "";
+        const username = document.getElementById("username").value;
+        const count    = document.getElementById("count").value;
 
-      const username = document.getElementById("username").value;
-      const count    = document.getElementById("count").value;
+        fetch("/start", {
+          method: "POST",
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          body: `username=${encodeURIComponent(username)}&count=${encodeURIComponent(count)}`
+        })
+        .then(async r => {
+          const text = await r.text();
+          console.log("Raw /start response:", text);
 
-      fetch("/start", {
-        method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: `username=${encodeURIComponent(username)}&count=${encodeURIComponent(count)}`
-      })
-      .then(async r => {
-        // Read raw text for debugging
-        const text = await r.text();
-        console.log("Raw /start response:", text);
-
-        // Try parsing as JSON
-        try {
-          const data = JSON.parse(text);
-          console.log("Parsed JSON:", data);
+          let data;
+          try {
+            data = JSON.parse(text);
+          } catch (err) {
+            console.error("Invalid JSON from /start:", err);
+            throw new Error("Server did not return valid JSON.");
+          }
+          if (data.error) {
+            throw new Error(data.error);
+          }
           return data;
-        } catch (e) {
-          console.error("Invalid JSON from /start:", e);
-          throw new Error("Invalid JSON from /start: " + e.message);
-        }
-      })
-      .then(data => {
-        // Now open the SSE stream
-        const evtSrc = new EventSource(`/progress/${data.session_id}`);
-        evtSrc.onmessage = evt => {
-          const p = document.createElement("p");
-          p.textContent = evt.data;
-          statusDiv.appendChild(p);
-          statusDiv.scrollTop = statusDiv.scrollHeight;
-          if (evt.data.includes("✅ Done!")) {
-            evtSrc.close();
-          }
-        };
-        evtSrc.onerror = () => {
-          if (evtSrc.readyState !== EventSource.CLOSED) {
+        })
+        .then(data => {
+          // Open SSE stream
+          const evtSrc = new EventSource(`/progress/${data.session_id}`);
+          evtSrc.onmessage = evt => {
             const p = document.createElement("p");
-            p.textContent = "❌ Stream error – please check server logs.";
+            p.textContent = evt.data;
             statusDiv.appendChild(p);
-          }
-          evtSrc.close();
-        };
-      })
-      .catch(err => {
-        const p = document.createElement("p");
-        p.textContent = `❌ Failed to start: ${err.message}`;
-        statusDiv.appendChild(p);
+            statusDiv.scrollTop = statusDiv.scrollHeight;
+            if (evt.data.includes("✅ Done!")) {
+              evtSrc.close();
+            }
+          };
+          evtSrc.onerror = () => {
+            if (evtSrc.readyState !== EventSource.CLOSED) {
+              const p = document.createElement("p");
+              p.textContent = "❌ Stream error – check server logs.";
+              statusDiv.appendChild(p);
+            }
+            evtSrc.close();
+          };
+        })
+        .catch(err => {
+          const p = document.createElement("p");
+          p.textContent = `❌ Failed to start: ${err.message}`;
+          statusDiv.appendChild(p);
+        });
       });
     });
-  });
-</script>
+  </script>
+
 </body>
 </html>
