@@ -12,6 +12,11 @@ from bs4 import BeautifulSoup
 import json
 from oauth2client.service_account import ServiceAccountCredentials  # ← only new import
 
+raw = os.getenv('GOOGLE_DRIVE_CREDENTIALS_JSON')
+if raw is None:
+    raise RuntimeError("GOOGLE_DRIVE_CREDENTIALS_JSON is not set")
+credentials_dict = json.loads(raw)
+
 app = Flask(__name__)
 
 # Global state
