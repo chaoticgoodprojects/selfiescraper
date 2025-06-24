@@ -17,7 +17,15 @@ raw = os.getenv('GOOGLE_DRIVE_CREDENTIALS_JSON')
 if raw is None:
     raise RuntimeError("GOOGLE_DRIVE_CREDENTIALS_JSON is not set")
 credentials_dict = json.loads(raw)
-credentials = Credentials.from_service_account_info(credentials_dict, scopes=["https://www.googleapis.com/auth/drive"])
+
+# ⚠️ Convert the literal “\n” sequences into actual newlines:
+credentials_dict['private_key'] = credentials_dict['private_key'].replace('\\n', '\n')
+
+# Now load credentials
+credentials = Credentials.from_service_account_info(
+    credentials_dict,
+    scopes=["https://www.googleapis.com/auth/drive"]
+)
 
 # Set up Google Drive API client
 drive_service = build('drive', 'v3', credentials=credentials, cache_discovery=False)
