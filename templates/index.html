@@ -1,40 +1,100 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-  <title>TikTok Downloader</title>
-  <script>
-    async function startDownload() {
-      const username = document.getElementById("username").value;
-      const count = document.getElementById("count").value;
-
-      const response = await fetch('/start', {
-        method: 'POST',
-        body: new URLSearchParams({ username, count })
-      });
-      const data = await response.json();
-      const sessionId = data.session_id;
-
-      const eventSource = new EventSource(`/progress/${sessionId}`);
-      const log = document.getElementById("log");
-      log.innerHTML = "";
-
-      eventSource.onmessage = (event) => {
-        log.innerHTML += event.data + "<br>";
-        if (event.data.includes("✅ Done!")) {
-          eventSource.close();
+    <meta charset="UTF-8">
+    <title>TikTok to Google Drive</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 600px;
+            margin: 2rem auto;
+            padding: 2rem;
+            background-color: #f9f9f9;
+            border-radius: 8px;
         }
-      };
-    }
-  </script>
+        h1 {
+            text-align: center;
+        }
+        input, button {
+            padding: 0.5rem;
+            margin: 0.5rem 0;
+            width: 100%;
+            font-size: 1rem;
+        }
+        button {
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            cursor: pointer;
+        }
+        #status {
+            margin-top: 1rem;
+            background-color: #fff;
+            border: 1px solid #ccc;
+            padding: 1rem;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+    </style>
 </head>
 <body>
-  <h1>TikTok to Google Drive</h1>
-  <label>Username (without @):</label>
-  <input type="text" id="username" /><br />
-  <label>Number of videos:</label>
-  <input type="number" id="count" /><br />
-  <button onclick="startDownload()">Download</button>
-  <hr />
-  <div id="log" style="white-space: pre-wrap;"></div>
+    <h1>TikTok to Google Drive</h1>
+    <form id="download-form">
+        <label for="username">TikTok Username:</label>
+        <input type="text" id="username" name="username" placeholder="e.g. charlidamelio" required>
+
+        <label for="count">Number of Videos:</label>
+        <input type="number" id="count" name="count" value="5" min="1" max="20" required>
+
+        <button type="submit">Download & Upload</button>
+    </form>
+
+    <div id="status"></div>
+
+    <script>
+        document.getElementById("download-form").addEventListener("submit", function (e) {
+            e.preventDefault();
+
+            const username = document.getElementById("username").value;
+            const count = document.getElementById("count").value;
+            const statusDiv = document.getElementById("status");
+            statusDiv.innerHTML = "Starting...";
+
+            fetch("/start", {
+                method: "POST",
+                headers: { "Content-Type": "application/x-www-form-urlencoded" },
+                body: `username=${encodeURIComponent(username)}&count=${encodeURIComponent(count)}`
+            })
+            .then(response => response.json())
+            .then(data => {
+                const sessionId = data.session_id;
+                const eventSource = new EventSource(`/progress/${sessionId}`);
+
+                eventSource.onmessage = function (event) {
+                    const message = event.data;
+                    const p = document.createElement("p");
+                    p.textContent = message;
+                    statusDiv.appendChild(p);
+                    statusDiv.scrollTop = statusDiv.scrollHeight;
+
+                    if (message.includes("✅ Done!")) {
+                        eventSource.close();
+                    }
+                };
+
+                eventSource.onerror = function () {
+                    const p = document.createElement("p");
+                    p.textContent = "❌ Error receiving updates.";
+                    statusDiv.appendChild(p);
+                    eventSource.close();
+                };
+            })
+            .catch(err => {
+                const p = document.createElement("p");
+                p.textContent = `❌ Error: ${err.message}`;
+                statusDiv.appendChild(p);
+            });
+        });
+    </script>
 </body>
 </html>
