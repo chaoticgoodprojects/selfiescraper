@@ -52,10 +52,19 @@ def upload_to_drive(filename):
     ).execute()
     return uploaded.get("id")
 
-def download_and_upload(username, count, session_id):
+    # Configure Chrome for headless, low-RAM environments
     options = uc.ChromeOptions()
     options.headless = True
-    driver = uc.Chrome(options=options)
+    options.add_argument("--no-sandbox")
+    options.add_argument("--disable-dev-shm-usage")
+    options.add_argument("--disable-gpu")
+    # if needed: options.binary_location = "/usr/bin/google-chrome"
+
+    try:
+        driver = uc.Chrome(options=options)
+    except Exception as e:
+        message_queue.put((session_id, f"❌ Chrome launch failed: {e}"))
+        return
 
     profile_url = f"https://www.tiktok.com/@{username}"
     driver.get(profile_url)
