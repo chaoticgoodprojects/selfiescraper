@@ -1,8 +1,7 @@
 services:
   - type: web
     name: tiktok-downloader
-    env: python
-    runtime: python3.11
+    env: docker
     buildCommand: ""
     startCommand: gunicorn app:app
     plan: free
