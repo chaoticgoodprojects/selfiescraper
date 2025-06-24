@@ -52,49 +52,67 @@
     <div id="status"></div>
 
     <script>
-        document.getElementById("download-form").addEventListener("submit", function (e) {
-            e.preventDefault();
+  document.addEventListener("DOMContentLoaded", () => {
+    const form = document.getElementById("download-form");
+    const statusDiv = document.getElementById("status");
 
-            const username = document.getElementById("username").value;
-            const count = document.getElementById("count").value;
-            const statusDiv = document.getElementById("status");
-            statusDiv.innerHTML = "Starting...";
+    form.addEventListener("submit", function(e) {
+      e.preventDefault();
 
-            fetch("/start", {
-                method: "POST",
-                headers: { "Content-Type": "application/x-www-form-urlencoded" },
-                body: `username=${encodeURIComponent(username)}&count=${encodeURIComponent(count)}`
-            })
-            .then(response => response.json())
-            .then(data => {
-                const sessionId = data.session_id;
-                const eventSource = new EventSource(`/progress/${sessionId}`);
+      // Clear previous status messages
+      statusDiv.innerHTML = "";
 
-                eventSource.onmessage = function (event) {
-                    const message = event.data;
-                    const p = document.createElement("p");
-                    p.textContent = message;
-                    statusDiv.appendChild(p);
-                    statusDiv.scrollTop = statusDiv.scrollHeight;
+      const username = document.getElementById("username").value;
+      const count    = document.getElementById("count").value;
 
-                    if (message.includes("✅ Done!")) {
-                        eventSource.close();
-                    }
-                };
+      fetch("/start", {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: `username=${encodeURIComponent(username)}&count=${encodeURIComponent(count)}`
+      })
+      .then(async r => {
+        // Read raw text for debugging
+        const text = await r.text();
+        console.log("Raw /start response:", text);
 
-                eventSource.onerror = function () {
-                    const p = document.createElement("p");
-                    p.textContent = "❌ Error receiving updates.";
-                    statusDiv.appendChild(p);
-                    eventSource.close();
-                };
-            })
-            .catch(err => {
-                const p = document.createElement("p");
-                p.textContent = `❌ Error: ${err.message}`;
-                statusDiv.appendChild(p);
-            });
-        });
-    </script>
+        // Try parsing as JSON
+        try {
+          const data = JSON.parse(text);
+          console.log("Parsed JSON:", data);
+          return data;
+        } catch (e) {
+          console.error("Invalid JSON from /start:", e);
+          throw new Error("Invalid JSON from /start: " + e.message);
+        }
+      })
+      .then(data => {
+        // Now open the SSE stream
+        const evtSrc = new EventSource(`/progress/${data.session_id}`);
+        evtSrc.onmessage = evt => {
+          const p = document.createElement("p");
+          p.textContent = evt.data;
+          statusDiv.appendChild(p);
+          statusDiv.scrollTop = statusDiv.scrollHeight;
+          if (evt.data.includes("✅ Done!")) {
+            evtSrc.close();
+          }
+        };
+        evtSrc.onerror = () => {
+          if (evtSrc.readyState !== EventSource.CLOSED) {
+            const p = document.createElement("p");
+            p.textContent = "❌ Stream error – please check server logs.";
+            statusDiv.appendChild(p);
+          }
+          evtSrc.close();
+        };
+      })
+      .catch(err => {
+        const p = document.createElement("p");
+        p.textContent = `❌ Failed to start: ${err.message}`;
+        statusDiv.appendChild(p);
+      });
+    });
+  });
+</script>
 </body>
 </html>
