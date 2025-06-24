@@ -34,6 +34,7 @@ drive = GoogleDrive(ga)
 def download_and_upload(username, count, session_id):
     options = uc.ChromeOptions()
     options.headless = True
+    options.binary_location = "/usr/bin/google-chrome"  # Add this line
     driver = uc.Chrome(options=options)
 
     profile_url = f"https://www.tiktok.com/@{username}"
