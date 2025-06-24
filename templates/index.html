@@ -10,7 +10,7 @@
     label { display: block; margin: 0.5rem 0; }
     input { padding: 0.3rem; width: 200px; }
     button { padding: 0.5rem 1rem; }
-    #status { border: 1px solid #ccc; padding: 1rem; height: 300px; overflow-y: scroll; white-space: pre-wrap; background: #f9f9f9; }
+    #status { border: 1px solid #ccc; padding: 1rem; height: 300px; overflow-y: scroll; background: #f9f9f9; }
     #status p { margin: 0.2rem 0; }
   </style>
 </head>
@@ -52,14 +52,11 @@
           body: `username=${encodeURIComponent(username)}&count=${encodeURIComponent(count)}`
         })
         .then(async r => {
-          const text = await r.text();
-          console.log("Raw /start response:", text);
-
+          // Always parse JSON—no HTML allowed
           let data;
           try {
-            data = JSON.parse(text);
+            data = await r.json();
           } catch (err) {
-            console.error("Invalid JSON from /start:", err);
             throw new Error("Server did not return valid JSON.");
           }
           if (data.error) {
