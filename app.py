@@ -24,7 +24,6 @@ progress = {}
 message_queue = queue.Queue()
 
 # Setup Google Drive authentication (replaces credentials.json)
-credentials_dict = json.loads(os.environ['GOOGLE_DRIVE_CREDENTIALS_JSON'])
 ga = GoogleAuth()
 ga.credentials = ServiceAccountCredentials.from_json_keyfile_dict(
     credentials_dict,
