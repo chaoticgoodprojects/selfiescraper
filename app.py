@@ -1,6 +1,7 @@
 from flask import Flask, request, jsonify, render_template, stream_with_context, Response
 from pydrive2.auth import GoogleAuth
 from pydrive2.drive import GoogleDrive
+from google.oauth2.service_account import Credentials  # modern replacement
 import os
 import threading
 import queue
@@ -10,7 +11,6 @@ import requests
 import undetected_chromedriver as uc
 from bs4 import BeautifulSoup
 import json
-from oauth2client.service_account import ServiceAccountCredentials  # ← only new import
 
 raw = os.getenv('GOOGLE_DRIVE_CREDENTIALS_JSON')
 if raw is None:
@@ -23,25 +23,25 @@ app = Flask(__name__)
 progress = {}
 message_queue = queue.Queue()
 
-# Setup Google Drive authentication (replaces credentials.json)
-ga = GoogleAuth()
-ga.credentials = ServiceAccountCredentials.from_json_keyfile_dict(
+# Setup Google Drive authentication using google-auth
+credentials = Credentials.from_service_account_info(
     credentials_dict,
     scopes=["https://www.googleapis.com/auth/drive"]
 )
+ga = GoogleAuth()
+ga.auth_method = 'service'
+ga.credentials = credentials
 drive = GoogleDrive(ga)
 
 def download_and_upload(username, count, session_id):
     options = uc.ChromeOptions()
     options.headless = True
-    options.binary_location = "/usr/bin/google-chrome"  # Add this line
     driver = uc.Chrome(options=options)
 
     profile_url = f"https://www.tiktok.com/@{username}"
     driver.get(profile_url)
     time.sleep(5)
 
-    # Scroll to load videos
     for _ in range(5):
         driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
         time.sleep(2)

@@ -4,3 +4,6 @@ undetected-chromedriver
 requests
 beautifulsoup4
 gunicorn
+pydrive2
+google-auth
+pyOpenSSL
