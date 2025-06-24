@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: tiktok-downloader
+    env: python
+    buildCommand: ""
+    startCommand: python app.py
+    plan: free
+    autoDeploy: true
+    envVars:
+      - key: GOOGLE_DRIVE_CREDENTIALS_JSON
+        sync: false
