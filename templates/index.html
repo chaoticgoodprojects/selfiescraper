@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>TikTok Downloader</title>
+  <script>
+    async function startDownload() {
+      const username = document.getElementById("username").value;
+      const count = document.getElementById("count").value;
+
+      const response = await fetch('/start', {
+        method: 'POST',
+        body: new URLSearchParams({ username, count })
+      });
+      const data = await response.json();
+      const sessionId = data.session_id;
+
+      const eventSource = new EventSource(`/progress/${sessionId}`);
+      const log = document.getElementById("log");
+      log.innerHTML = "";
+
+      eventSource.onmessage = (event) => {
+        log.innerHTML += event.data + "<br>";
+        if (event.data.includes("✅ Done!")) {
+          eventSource.close();
+        }
+      };
+    }
+  </script>
+</head>
+<body>
+  <h1>TikTok to Google Drive</h1>
+  <label>Username (without @):</label>
+  <input type="text" id="username" /><br />
+  <label>Number of videos:</label>
+  <input type="number" id="count" /><br />
+  <button onclick="startDownload()">Download</button>
+  <hr />
+  <div id="log" style="white-space: pre-wrap;"></div>
+</body>
+</html>
