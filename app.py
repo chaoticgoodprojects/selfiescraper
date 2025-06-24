@@ -1,7 +1,7 @@
 from flask import Flask, request, jsonify, render_template, stream_with_context, Response
-from pydrive2.auth import GoogleAuth
-from pydrive2.drive import GoogleDrive
-from google.oauth2.service_account import Credentials  # modern replacement
+from google.oauth2.service_account import Credentials
+from googleapiclient.discovery import build
+from googleapiclient.http import MediaFileUpload
 import os
 import threading
 import queue
@@ -12,10 +12,15 @@ import undetected_chromedriver as uc
 from bs4 import BeautifulSoup
 import json
 
+# Load credentials from environment variable
 raw = os.getenv('GOOGLE_DRIVE_CREDENTIALS_JSON')
 if raw is None:
     raise RuntimeError("GOOGLE_DRIVE_CREDENTIALS_JSON is not set")
 credentials_dict = json.loads(raw)
+credentials = Credentials.from_service_account_info(credentials_dict, scopes=["https://www.googleapis.com/auth/drive"])
+
+# Set up Google Drive API client
+drive_service = build('drive', 'v3', credentials=credentials, cache_discovery=False)
 
 app = Flask(__name__)
 
@@ -23,15 +28,21 @@ app = Flask(__name__)
 progress = {}
 message_queue = queue.Queue()
 
-# Setup Google Drive authentication using google-auth
-credentials = Credentials.from_service_account_info(
-    credentials_dict,
-    scopes=["https://www.googleapis.com/auth/drive"]
-)
-ga = GoogleAuth()
-ga.auth_method = 'service'
-ga.credentials = credentials
-drive = GoogleDrive(ga)
+# Upload a file to a specific folder in a shared drive
+def upload_to_drive(filename):
+    folder_id = '1nwBKcEvBLjbQbw0LuCY940FSCt9nHfH6'  # Shared folder ID
+    file_metadata = {
+        'name': filename,
+        'parents': [folder_id]
+    }
+    media = MediaFileUpload(filename, mimetype='video/mp4')
+    uploaded = drive_service.files().create(
+        body=file_metadata,
+        media_body=media,
+        fields='id',
+        supportsAllDrives=True
+    ).execute()
+    return uploaded.get("id")
 
 def download_and_upload(username, count, session_id):
     options = uc.ChromeOptions()
@@ -54,29 +65,22 @@ def download_and_upload(username, count, session_id):
 
     total = len(links)
     for idx, link in enumerate(links):
-        msg = f"Processing video {idx+1}/{total}: {link}"
-        message_queue.put((session_id, msg))
-
+        message_queue.put((session_id, f"Processing video {idx+1}/{total}: {link}"))
         try:
             r = requests.post("https://lovetik.com/api/ajax/search", data={"query": link}, headers={"x-requested-with": "XMLHttpRequest"})
             data = r.json()
             download_links = [x['a'] for x in data['links'] if 'HD Original' in x['t'] or '1080' in x['s']]
             if not download_links:
                 continue
-
             best_url = download_links[0]
             filename = f"{username}_{idx+1}.mp4"
             with open(filename, 'wb') as f:
                 f.write(requests.get(best_url).content)
-
-            file_drive = drive.CreateFile({'title': filename})
-            file_drive.SetContentFile(filename)
-            file_drive.Upload()
+            upload_to_drive(filename)
             os.remove(filename)
             message_queue.put((session_id, f"✅ Uploaded {filename} to Drive"))
         except Exception as e:
             message_queue.put((session_id, f"❌ Failed on video {idx+1}: {str(e)}"))
-
     message_queue.put((session_id, "✅ Done!"))
 
 @app.route('/')
