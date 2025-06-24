@@ -49,13 +49,5 @@ RUN pip install -r requirements.txt
 # Expose port
 EXPOSE 10000
 
-# Start Flask app with gunicorn
-CMD [
-  "gunicorn",
-  "app:app",
-  "--bind", "0.0.0.0:10000",
-  "--timeout", "300",             # give each request up to 5 minutes
-  "--workers", "1",               # only one worker (Chrome is heavy)
-  "--threads", "4",               # allow up to 4 concurrent threads
-  "--worker-class", "gthread"     # thread‐based worker to let SSE and scraping co‐exist
-]
+# Start your app with Gunicorn in a single worker, threaded, higher timeout
+CMD ["gunicorn","app:app","--bind","0.0.0.0:10000","--workers","1","--threads","4","--worker-class","gthread","--timeout","180"]
