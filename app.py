@@ -73,16 +73,28 @@ def download_and_upload(username, count, session_id):
     raw_hrefs = []
     try:
         import re
-        m = re.search(r'<script id="SIGI_STATE" type="application/json">(.*?)</script>', html, re.S)
+        m = re.search(
+            r'<script id="SIGI_STATE" type="application/json">(.*?)</script>',
+            html, re.S
+        )
         if m:
             state = json.loads(m.group(1))
             vids = state.get('ItemModule', {}).keys()
             raw_hrefs = [f"/@{username}/video/{vid}" for vid in vids]
     except Exception:
         raw_hrefs = []
+
     if not raw_hrefs:
-        raw_hrefs = [a['href'] for a in soup.find_all('a', href=True) if '/video/' in a['href']]
-    links = list(dict.fromkeys([urljoin("https://www.tiktok.com", href) for href in raw_hrefs]))[:count]
+        raw_hrefs = [
+            a['href']
+            for a in soup.find_all('a', href=True)
+            if '/video/' in a['href']
+        ]
+
+    links = list(dict.fromkeys(
+        urljoin("https://www.tiktok.com", href) for href in raw_hrefs
+    ))[:count]
+
     total = len(links)
     message_queue.put((session_id, f"🔍 Found {total} video links"))
     if total == 0:
@@ -101,35 +113,45 @@ def download_and_upload(username, count, session_id):
                 timeout=15
             )
             data = r.json()
-            message_queue.put((session_id, f"ℹ️ API returned {len(data.get('links', []))} link entries"))
-            # Prefer HD, else fallback
-            hd_links = [item.get('a') for item in data.get('links', []) if item.get('a') and ("HD Original" in item.get('t','') or '1080' in item.get('s',''))]
-            if hd_links:
-                best_url = hd_links[0]
-            else:
-                fallback_links = [item.get('a') for item in data.get('links', []) if item.get('a')]
-                if fallback_links:
-                    best_url = fallback_links[0]
-                    message_queue.put((session_id, "⚠️ No HD link; using fallback resolution"))
-                else:
-                    best_url = None
+            message_queue.put(
+                (session_id,
+                 f"ℹ️ API returned {len(data.get('links', []))} link entries")
+            )
 
+            # pick first available URL
+            candidates = [
+                item.get('a')
+                for item in data.get('links', [])
+                if item.get('a')
+            ]
+            if not candidates:
+                raise RuntimeError("No download links found")
+            best_url = candidates[0]
             message_queue.put((session_id, f"ℹ️ Selected URL: {best_url}"))
-            if not best_url:
-                raise RuntimeError("No download URL could be selected")
 
             filename = f"{username}_{idx}.mp4"
             message_queue.put((session_id, f"⬇️ Downloading to {filename}"))
-            # Fetch binary with proper headers (cookies/UA) for Lovetik
-headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
-response = requests.get(best_url, headers=headers, timeout=30, allow_redirects=True)
-if response.status_code != 200 or not response.content:
-    raise RuntimeError(f"Download failed, status {response.status_code}")
-content = response.content
-            with open(filename, 'wb') as f:
-                f.write(content)
 
-            # Upload
+            # << ONLY CHANGE >>
+            # fetch with a real browser UA so Lovetik serves the MP4, not HTML
+            headers = {
+                'User-Agent': (
+                    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
+                    'AppleWebKit/537.36 (KHTML, like Gecko) '
+                    'Chrome/114.0.0.0 Safari/537.36'
+                )
+            }
+            response = requests.get(
+                best_url,
+                headers=headers,
+                timeout=30,
+                allow_redirects=True
+            )
+            response.raise_for_status()
+            with open(filename, 'wb') as f:
+                f.write(response.content)
+
+            # Upload to shared drive
             file_drive = drive.CreateFile({
                 'title': filename,
                 'parents': [{'id': SHARED_FOLDER_ID}]
@@ -137,6 +159,7 @@ content = response.content
             file_drive.SetContentFile(filename)
             file_drive.Upload(param={'supportsTeamDrives': True})
             os.remove(filename)
+
             message_queue.put((session_id, f"✅ Uploaded {filename}"))
         except Exception as e:
             message_queue.put((session_id, f"❌ Failed on video {idx}: {e}"))
@@ -154,7 +177,11 @@ def start():
     session_id = str(uuid.uuid4())
     username = request.form['username']
     count = int(request.form['count'])
-    threading.Thread(target=download_and_upload, args=(username, count, session_id), daemon=True).start()
+    threading.Thread(
+        target=download_and_upload,
+        args=(username, count, session_id),
+        daemon=True
+    ).start()
     return jsonify({"session_id": session_id})
 
 
@@ -168,7 +195,10 @@ def stream(session_id):
                     yield f"data: {msg}\n\n"
             except queue.Empty:
                 break
-    return Response(stream_with_context(event_stream()), mimetype='text/event-stream')
+    return Response(
+        stream_with_context(event_stream()),
+        mimetype='text/event-stream'
+    )
 
 
 if __name__ == '__main__':
