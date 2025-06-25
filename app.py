@@ -120,7 +120,12 @@ def download_and_upload(username, count, session_id):
 
             filename = f"{username}_{idx}.mp4"
             message_queue.put((session_id, f"⬇️ Downloading to {filename}"))
-            content = requests.get(best_url, timeout=30).content
+            # Fetch binary with proper headers (cookies/UA) for Lovetik
+headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
+response = requests.get(best_url, headers=headers, timeout=30, allow_redirects=True)
+if response.status_code != 200 or not response.content:
+    raise RuntimeError(f"Download failed, status {response.status_code}")
+content = response.content
             with open(filename, 'wb') as f:
                 f.write(content)
 
