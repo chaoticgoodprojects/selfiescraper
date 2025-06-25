@@ -69,9 +69,22 @@ def download_and_upload(username, count, session_id):
     html = driver.page_source
     driver.quit()
 
-    # Parse video links
-    soup = BeautifulSoup(html, 'html.parser')
-    raw_hrefs = [a['href'] for a in soup.find_all('a', href=True) if '/video/' in a['href']]
+        # Parse video links: first try JSON state
+    raw_hrefs = []
+    try:
+        # TikTok embeds JSON in a script tag with id SIGI_STATE
+        import re
+        m = re.search(r'<script id="SIGI_STATE" type="application/json">(.*?)</script>', html, re.S)
+        if m:
+            state = json.loads(m.group(1))
+            video_ids = state.get("ItemList", {}).get("user-post", {}).get("list", [])
+            raw_hrefs = [f"/@{username}/video/{vid}" for vid in video_ids]
+    except Exception:
+        raw_hrefs = []
+    if not raw_hrefs:
+        # Fallback to anchor tags
+        raw_hrefs = [a['href'] for a in BeautifulSoup(html, 'html.parser').find_all('a', href=True) if '/video/' in a['href']]
+    # Normalize and dedupe
     normalized = [urljoin("https://www.tiktok.com", href) for href in raw_hrefs]
     links = list(dict.fromkeys(normalized))[:count]
     total = len(links)
