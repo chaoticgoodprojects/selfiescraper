@@ -1,6 +1,15 @@
 import os, json, threading, time
 import requests
 from flask import Flask, request, jsonify
+from flask import render_template
+
+@app.route("/", methods=["GET"])
+def index():
+    try:
+        return render_template("index.html")
+    except Exception as e:
+        # if something really is wrong with your template, this will show the error
+        return f"Template rendering error: {e}", 500
 
 # Selenium imports for headless Chrome
 from selenium import webdriver
