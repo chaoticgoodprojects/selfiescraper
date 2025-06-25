@@ -38,7 +38,6 @@ try:
     ga.credentials = creds
     drive = GoogleDrive(ga)
 except InvalidConfigError:
-    # Fallback: manually assign creds
     ga = GoogleAuth()
     ga.credentials = creds
     drive = GoogleDrive(ga)
@@ -69,32 +68,29 @@ def download_and_upload(username, count, session_id):
     html = driver.page_source
     driver.quit()
 
-        # Parse video links: first try JSON state
+    # Parse video links from JSON or anchors
+    soup = BeautifulSoup(html, 'html.parser')
     raw_hrefs = []
     try:
-        # TikTok embeds JSON in a script tag with id SIGI_STATE
         import re
         m = re.search(r'<script id="SIGI_STATE" type="application/json">(.*?)</script>', html, re.S)
         if m:
             state = json.loads(m.group(1))
-            video_ids = state.get("ItemList", {}).get("user-post", {}).get("list", [])
-            raw_hrefs = [f"/@{username}/video/{vid}" for vid in video_ids]
+            vids = state.get('ItemModule', {}).keys()
+            raw_hrefs = [f"/@{username}/video/{vid}" for vid in vids]
     except Exception:
         raw_hrefs = []
     if not raw_hrefs:
-        # Fallback to anchor tags
-        raw_hrefs = [a['href'] for a in BeautifulSoup(html, 'html.parser').find_all('a', href=True) if '/video/' in a['href']]
-    # Normalize and dedupe
-    normalized = [urljoin("https://www.tiktok.com", href) for href in raw_hrefs]
-    links = list(dict.fromkeys(normalized))[:count]
+        raw_hrefs = [a['href'] for a in soup.find_all('a', href=True) if '/video/' in a['href']]
+    links = list(dict.fromkeys([urljoin("https://www.tiktok.com", href) for href in raw_hrefs]))[:count]
     total = len(links)
     message_queue.put((session_id, f"🔍 Found {total} video links"))
     if total == 0:
-        message_queue.put((session_id, "❌ No videos found; check username or site layout."))
+        message_queue.put((session_id, "❌ No videos found; check username."))
         message_queue.put((session_id, "✅ Done!"))
         return
 
-    # Download & upload each
+    # Download & upload each video
     for idx, link in enumerate(links, start=1):
         message_queue.put((session_id, f"Processing video {idx}/{total}: {link}"))
         try:
@@ -105,14 +101,19 @@ def download_and_upload(username, count, session_id):
                 timeout=15
             )
             data = r.json()
-            download_links = [
-                item['a'] for item in data.get('links', [])
-                if 'a' in item and ("HD Original" in item.get('t', '') or '1080' in item.get('s', ''))
-            ]
-            if not download_links:
-                raise RuntimeError("No HD link found")
+            message_queue.put((session_id, f"ℹ️ API returned {len(data.get('links', []))} link entries"))
+            # Prefer HD, else fallback
+            hd = [item['a'] for item in data.get('links', []) if item.get('a') and ("HD Original" in item.get('t','') or '1080' in item.get('s',''))]
+            if hd:
+                best_url = hd[0]
+            else:
+                fallback = [item['a'] for item in data.get('links', []) if item.get('a')]
+                if fallback:
+                    best_url = fallback[0]
+                    message_queue.put((session_id, "⚠️ No HD link; using fallback resolution"))
+                else:
+                    raise RuntimeError("No download links at all")
 
-            best_url = download_links[0]
             filename = f"{username}_{idx}.mp4"
             message_queue.put((session_id, f"⬇️ Downloading to {filename}"))
             with open(filename, 'wb') as f:
@@ -140,14 +141,10 @@ def index():
 
 @app.route('/start', methods=['POST'])
 def start():
+    session_id = str(uuid.uuid4())
     username = request.form['username']
     count = int(request.form['count'])
-    session_id = str(uuid.uuid4())
-    threading.Thread(
-        target=download_and_upload,
-        args=(username, count, session_id),
-        daemon=True
-    ).start()
+    threading.Thread(target=download_and_upload, args=(username, count, session_id), daemon=True).start()
     return jsonify({"session_id": session_id})
 
 
