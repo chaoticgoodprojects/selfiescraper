@@ -37,7 +37,7 @@ RUN curl -fsSL https://dl.google.com/linux/linux_signing_key.pub | gpg --dearmor
     rm -rf /var/lib/apt/lists/*
 
 # Set work directory
-WORKDIR /app
+WORKDIR /opt/render/project/src
 
 # Copy code
 COPY . .
