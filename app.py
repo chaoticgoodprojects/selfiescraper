@@ -23,6 +23,9 @@ if not raw:
     raise RuntimeError("Missing env var: GOOGLE_DRIVE_CREDENTIALS_JSON")
 info = json.loads(raw)
 
+if "private_key" in info:
+    info["private_key"] = info["private_key"].replace('\\n', '\n')
+
 scope = ["https://www.googleapis.com/auth/drive"]
 creds = ServiceAccountCredentials.from_json_keyfile_dict(info, scopes=scope)
 
