@@ -6,8 +6,7 @@ from pydrive2.auth import GoogleAuth
 from pydrive2.drive import GoogleDrive
 from urllib.parse import urljoin
 
-# ID of the folder in the shared drive where you want to upload
-SHARED_FOLDER_ID = "1nwBKcEvBLjbQbw0LuCY940FSCt9nHfH6"
+# ID of the folder in the shared drive where you want to upload\ nSHARED_FOLDER_ID = "1nwBKcEvBLjbQbw0LuCY940FSCt9nHfH6"
 
 app = Flask(__name__)
 
@@ -22,18 +21,23 @@ raw = os.getenv("GOOGLE_DRIVE_CREDENTIALS_JSON")
 if not raw:
     raise RuntimeError("Missing env var: GOOGLE_DRIVE_CREDENTIALS_JSON")
 info = json.loads(raw)
-
-if "private_key" in info:
-    info["private_key"] = info["private_key"].replace('\\n', '\n')
+# Replace literal "\\n" sequences with real newlines for the PEM
+info["private_key"] = info["private_key"].replace('\\n', '\n')
 
 scope = ["https://www.googleapis.com/auth/drive"]
 creds = ServiceAccountCredentials.from_json_keyfile_dict(info, scopes=scope)
 
+# Configure PyDrive2 to use only service-account creds—no client_secrets.json or file writes
 ga = GoogleAuth()
+ga.settings['client_config_file'] = None
+#ga.settings['save_credentials'] disabled to avoid rewriting files
+ga.settings['save_credentials'] = False
+ga.settings['get_refresh_token'] = False
+ga.settings['save_credentials_backend'] = None
 ga.credentials = creds
 drive = GoogleDrive(ga)
 
-print("⚙️ Authenticating as service account:", creds.service_account_email, flush=True)
+print("⚙️ Authenticated as service account:", creds.service_account_email, flush=True)
 
 
 def download_and_upload(username, count, session_id):
@@ -73,7 +77,7 @@ def download_and_upload(username, count, session_id):
             )
             data = r.json()
             download_links = [
-                x['a'] for x in data.get('links', [])
+                x.get('a') for x in data.get('links', [])
                 if 'HD Original' in x.get('t', '') or '1080' in x.get('s', '')
             ]
             if not download_links:
