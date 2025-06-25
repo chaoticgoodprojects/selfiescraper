@@ -103,21 +103,26 @@ def download_and_upload(username, count, session_id):
             data = r.json()
             message_queue.put((session_id, f"ℹ️ API returned {len(data.get('links', []))} link entries"))
             # Prefer HD, else fallback
-            hd = [item['a'] for item in data.get('links', []) if item.get('a') and ("HD Original" in item.get('t','') or '1080' in item.get('s',''))]
-            if hd:
-                best_url = hd[0]
+            hd_links = [item.get('a') for item in data.get('links', []) if item.get('a') and ("HD Original" in item.get('t','') or '1080' in item.get('s',''))]
+            if hd_links:
+                best_url = hd_links[0]
             else:
-                fallback = [item['a'] for item in data.get('links', []) if item.get('a')]
-                if fallback:
-                    best_url = fallback[0]
+                fallback_links = [item.get('a') for item in data.get('links', []) if item.get('a')]
+                if fallback_links:
+                    best_url = fallback_links[0]
                     message_queue.put((session_id, "⚠️ No HD link; using fallback resolution"))
                 else:
-                    raise RuntimeError("No download links at all")
+                    best_url = None
+
+            message_queue.put((session_id, f"ℹ️ Selected URL: {best_url}"))
+            if not best_url:
+                raise RuntimeError("No download URL could be selected")
 
             filename = f"{username}_{idx}.mp4"
             message_queue.put((session_id, f"⬇️ Downloading to {filename}"))
+            content = requests.get(best_url, timeout=30).content
             with open(filename, 'wb') as f:
-                f.write(requests.get(best_url, timeout=30).content)
+                f.write(content)
 
             # Upload
             file_drive = drive.CreateFile({
