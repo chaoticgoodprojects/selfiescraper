@@ -5,6 +5,7 @@ from oauth2client.service_account import ServiceAccountCredentials
 from pydrive2.auth import GoogleAuth
 from pydrive2.drive import GoogleDrive
 from urllib.parse import urljoin
+import re
 
 # ID of the folder in the shared drive where you want to upload
 SHARED_FOLDER_ID = "1nwBKcEvBLjbQbw0LuCY940FSCt9nHfH6"
@@ -69,10 +70,8 @@ def download_and_upload(username, count, session_id):
     driver.quit()
 
     # Parse video links from JSON or anchors
-    soup = BeautifulSoup(html, 'html.parser')
     raw_hrefs = []
     try:
-        import re
         m = re.search(r'<script id="SIGI_STATE" type="application/json">(.*?)</script>', html, re.S)
         if m:
             state = json.loads(m.group(1))
@@ -81,7 +80,9 @@ def download_and_upload(username, count, session_id):
     except Exception:
         raw_hrefs = []
     if not raw_hrefs:
+        soup = BeautifulSoup(html, 'html.parser')
         raw_hrefs = [a['href'] for a in soup.find_all('a', href=True) if '/video/' in a['href']]
+
     links = list(dict.fromkeys([urljoin("https://www.tiktok.com", href) for href in raw_hrefs]))[:count]
     total = len(links)
     message_queue.put((session_id, f"🔍 Found {total} video links"))
@@ -102,8 +103,10 @@ def download_and_upload(username, count, session_id):
             )
             data = r.json()
             message_queue.put((session_id, f"ℹ️ API returned {len(data.get('links', []))} link entries"))
+
             # Prefer HD, else fallback
-            hd_links = [item.get('a') for item in data.get('links', []) if item.get('a') and ("HD Original" in item.get('t','') or '1080' in item.get('s',''))]
+            hd_links = [item.get('a') for item in data.get('links', [])
+                        if item.get('a') and ("HD Original" in item.get('t','') or '1080' in item.get('s',''))]
             if hd_links:
                 best_url = hd_links[0]
             else:
@@ -120,12 +123,14 @@ def download_and_upload(username, count, session_id):
 
             filename = f"{username}_{idx}.mp4"
             message_queue.put((session_id, f"⬇️ Downloading to {filename}"))
+
             # Fetch binary with proper headers (cookies/UA) for Lovetik
-headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
-response = requests.get(best_url, headers=headers, timeout=30, allow_redirects=True)
-if response.status_code != 200 or not response.content:
-    raise RuntimeError(f"Download failed, status {response.status_code}")
-content = response.content
+            headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
+            response = requests.get(best_url, headers=headers, timeout=30, allow_redirects=True)
+            if response.status_code != 200 or not response.content:
+                raise RuntimeError(f"Download failed, status {response.status_code}")
+            content = response.content
+
             with open(filename, 'wb') as f:
                 f.write(content)
 
@@ -138,6 +143,7 @@ content = response.content
             file_drive.Upload(param={'supportsTeamDrives': True})
             os.remove(filename)
             message_queue.put((session_id, f"✅ Uploaded {filename}"))
+
         except Exception as e:
             message_queue.put((session_id, f"❌ Failed on video {idx}: {e}"))
 
