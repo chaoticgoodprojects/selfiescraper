@@ -6,7 +6,8 @@ from pydrive2.auth import GoogleAuth
 from pydrive2.drive import GoogleDrive
 from urllib.parse import urljoin
 
-# ID of the folder in the shared drive where you want to upload\ nSHARED_FOLDER_ID = "1nwBKcEvBLjbQbw0LuCY940FSCt9nHfH6"
+# ID of the folder in the shared drive where you want to upload
+SHARED_FOLDER_ID = "1nwBKcEvBLjbQbw0LuCY940FSCt9nHfH6"
 
 app = Flask(__name__)
 
